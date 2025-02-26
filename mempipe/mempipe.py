@@ -14,10 +14,10 @@ class MemPipe:
         ex_array is used to determine the shape and dtype of the shared memory
         """
         self._shape = ex_array.shape
-        self._dtype = ex_array.dtype
+        dtype = ex_array.dtype
         shm_size = ex_array.nbytes
         self._shm = SharedMemory(create=True, size=shm_size)
-        self._arr = np.ndarray(self._shape, dtype=self._dtype, buffer=self._shm.buf)
+        self._arr = np.ndarray(self._shape, dtype=dtype, buffer=self._shm.buf)
         self._lock = Lock()
         self._p_in, self._p_out = Pipe(duplex=False)
         self._polled = False
