@@ -10,8 +10,8 @@ class MemPipe:
         self._init_done = False
     
     def __del__(self):
-        self.shm.close()
-        self.shm.unlink()
+        self._shm.close()
+        self._shm.unlink()
         self.p_in.close()
         self.p_out.close()
 
