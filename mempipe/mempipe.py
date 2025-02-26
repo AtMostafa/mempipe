@@ -1,6 +1,7 @@
 "The mempipe module provides a simple way to create a pipe between two processes using shared memory."
 
-from multiprocessing import shared_memory, Pipe, Lock
+from multiprocessing import Pipe, Lock
+from multiprocessing.shared_memory import SharedMemory
 
 import numpy as np
 
@@ -15,17 +16,18 @@ class MemPipe:
         self._shape = ex_array.shape
         self._dtype = ex_array.dtype
         shm_size = ex_array.nbytes
-        self._shm = shared_memory.SharedMemory(create=True, size=shm_size)
+        self._shm = SharedMemory(create=True, size=shm_size)
         self._arr = np.ndarray(self._shape, dtype=self._dtype, buffer=self._shm.buf)
         self._lock = Lock()
         self._p_in, self._p_out = Pipe(duplex=False)
         self._polled = False
 
-    def __del__(self):
-        self._shm.close()
-        self._shm.unlink()
-        self._p_in.close()
-        self._p_out.close()
+    def Pipe(self, *args, **kwargs):
+        "To imitate the multiprocessing.Pipe() interface"
+        if hasattr(self, "_p_in"):
+            return self, self
+        else:
+            raise ValueError("MemPipe not initialised")
 
     def send(self, data):
         assert data.shape == self._shape, \
@@ -56,10 +58,6 @@ class MemPipe:
         self._shm.unlink()
         self._p_in.close()
         self._p_out.close()
-
-    def Pipe(self, *args, **kwargs):
-        "To imitate the multiprocessing.Pipe() interface"
-        if hasattr(self, "_p_in"):
-            return self, self
-        else:
-            raise ValueError("MemPipe not initialised")
+    
+    def __del__(self):
+        self.close()
