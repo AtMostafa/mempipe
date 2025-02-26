@@ -7,4 +7,4 @@ if __name__ == "__main__":
     p_in.send(np.random.rand(10, 10))
     p_in.poll()
     print(p_out.recv())
-    mp.close()
+    del(mp)
