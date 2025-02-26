@@ -19,6 +19,7 @@ class MemPipe:
         self._arr = np.ndarray(self._shape, dtype=self._dtype, buffer=self._shm.buf)
         self._lock = Lock()
         self._p_in, self._p_out = Pipe(duplex=False)
+        self._polled = False
 
     def __del__(self):
         self._shm.close()
@@ -34,14 +35,18 @@ class MemPipe:
         self._p_out.send("GO")
 
     def recv(self):
+        if not self._polled:
+            return None
         with self._lock:
             data = self._arr.copy()
+        self._polled = False
         return data
 
     def poll(self, *args, **kwargs):
         if not self._p_in.poll(*args, **kwargs):
             return False
         elif self._p_in.recv() == "GO":
+            self._polled = True
             return True
         else:
             raise ValueError("Invalid message received")
@@ -52,11 +57,9 @@ class MemPipe:
         self._p_in.close()
         self._p_out.close()
 
-class p_in:
-    def poll(self, *args, **kwargs):
-        return False
-    def recv(self):
-        return None
-class p_out:
-    def send(self, *args, **kwargs):
-        pass
+    def Pipe(self, *args, **kwargs):
+        "To imitate the multiprocessing.Pipe() interface"
+        if hasattr(self, "_p_in"):
+            return self, self
+        else:
+            raise ValueError("MemPipe not initialised")
