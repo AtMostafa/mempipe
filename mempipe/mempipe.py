@@ -5,10 +5,11 @@ from multiprocessing import shared_memory, Pipe, Lock
 
 import numpy as np
 
+
 class MemPipe:
     def __init__(self):
         self._init_done = False
-    
+
     def __del__(self):
         self._shm.close()
         self._shm.unlink()
@@ -30,7 +31,7 @@ class MemPipe:
         self._arr = np.ndarray(self._shape, dtype=self._dtype, buffer=self._shm.buf)
         self._lock = Lock()
         self._init_done = True
-        
+
     def Pipe(self, *args, **kwargs):
         self.p_in, self.p_out = Pipe(*args, **kwargs)
         return self.p_in, self.p_out
@@ -40,7 +41,7 @@ class MemPipe:
             f"Data shape {data.shape} does not match mempipe shape {self._shape}"
         with self._lock:
             self._arr[:] = data
-        self.p_out.send('GO')
+        self.p_out.send("GO")
 
     def recv(self):
         with self._lock:
@@ -50,7 +51,7 @@ class MemPipe:
     def poll(self, *args, **kwargs):
         if not self.p_in.poll(*args, **kwargs):
             return False
-        elif self.p_in.recv() == 'GO':
+        elif self.p_in.recv() == "GO":
             return True
         else:
             raise ValueError("Invalid message received")
