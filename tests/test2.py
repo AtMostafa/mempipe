@@ -1,6 +1,6 @@
 import numpy as np
 import mempipe
-from multiprocessing import Process
+from multiprocessing import Process, Pipe
 
 def worker(in_conn, out_conn, index):
     """
@@ -11,11 +11,8 @@ def worker(in_conn, out_conn, index):
         if not in_conn.poll():
             continue
         arr = in_conn.recv()
-        if arr is None:
-            # Forward the sentinel to the next in the chain
-            out_conn.send(None)
-            break
         arr = arr + index
+        print(f'Worker {index} sent:', arr)
         out_conn.send(arr)
 
 if __name__ == "__main__":
@@ -27,9 +24,9 @@ if __name__ == "__main__":
     
     # Example data
     arr = np.array([1, 2, 3], dtype=np.int64)
-    memp = mempipe.MemPipe(arr)
     NUM_PROCS = 5
-    pipes = [memp.Pipe(duplex=False) for _ in range(NUM_PROCS + 1)]
+    # pipes = [mempipe.MemPipe(arr).Pipe(duplex=False) for _ in range(NUM_PROCS + 1)]
+    pipes = [Pipe(duplex=False) for _ in range(NUM_PROCS + 1)]
     
     # Spawn the 5 worker processes in a chain
     processes = []
@@ -45,7 +42,7 @@ if __name__ == "__main__":
     
     # Receive the processed array from the last process via pipes[5][0]
     while True:
-        if pipes[NUM_PROCS][0].poll():
+        if pipes[NUM_PROCS][0].poll(5):
             result = pipes[NUM_PROCS][0].recv()
             break
     
@@ -58,7 +55,12 @@ if __name__ == "__main__":
     # _ = pipes[NUM_PROCS][0].recv()
     
     # Join all processes
-    del(memp)
+    for p in pipes:
+        try:
+            p[0].close()
+        except:
+            pass
+
     for p in processes:
-        p.join(1)
+        p.join(.1)
         p.terminate()
