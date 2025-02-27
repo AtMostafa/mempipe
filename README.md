@@ -5,7 +5,7 @@ Meant for a multiprocessing data analysis pipeline where each process analyses t
 
 The passed data can only be a numpy array.
 
-Originally designed for a **real-time Brain-Computer-Interface** application.
+Originally designed for a real-time Brain-Computer-Interface application.
 
 ## How to use
 
@@ -20,4 +20,4 @@ All else is handled internally.
 My simple simulation (found here: [./tests/test3.py](./tests/test3.py)) shows that passing a numpy array of $12000 \times 4000$ is much faster this way, compared to regular pipes.
 
 ![a figure](./docs/Figure_1.png)  
-20 repeatitions and the execution time on the y-axis.
+20 repeatitions on the x-axis, and the execution time on the y-axis.

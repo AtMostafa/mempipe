@@ -7,19 +7,16 @@ import numpy as np
 
 
 class MemPipe:
-    def __init__(self, ex_array: np.ndarray):
+    def __init__(self, ex_array: np.ndarray = None):
         """
-        Initialize the mempipe
+        Initialize the mempipe.
+        MemPipes can only transfer numpy arrays of the same shape and dtype. 
         ex_array: example numpy array that will be shared between processes
         ex_array is used to determine the shape and dtype of the shared memory
+        If not supplied initially, it will be inferred from the first send.
         """
-        self._shape = ex_array.shape
-        self._shm_dtype = ex_array.dtype
-        shm_size = ex_array.nbytes
-        self._shm = SharedMemory(create=True, size=shm_size)
-        self._shm_name = self._shm.name
-
-        self._arr = ex_array
+        if isinstance(ex_array, np.ndarray):
+            self._init_shm(ex_array)
         self._lock = Lock()
         self._p_in, self._p_out = Pipe(duplex=False)
         self._polled = False
@@ -36,12 +33,21 @@ class MemPipe:
         arr = np.ndarray(self._shape, dtype=self._shm_dtype, buffer=shm.buf)
         arr[:] = value
 
+    def _init_shm(self, ex_array):
+        self._shape = ex_array.shape
+        self._shm_dtype = ex_array.dtype
+        shm_size = ex_array.nbytes
+        self._shm = SharedMemory(create=True, size=shm_size)
+        self._shm_name = self._shm.name
+        self._arr = ex_array
+
+
     def Pipe(self, *args, **kwargs):
         "To imitate the multiprocessing.Pipe() interface"
         if hasattr(self, "_p_in"):
             return self, self
         else:
-            raise ValueError("MemPipe not initialised")
+            raise ValueError("MemPipe not instanciaed")
 
     def send(self, data):
         assert data.shape == self._shape, \

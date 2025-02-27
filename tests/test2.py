@@ -48,11 +48,6 @@ if __name__ == "__main__":
     
     print("Received from the final process:", result)
     # result: [11, 12, 13]
-    # Send a sentinel (None) to signal each process to stop
-    # pipes[0][1].send(None)  # This will propagate through the chain
-    
-    # Read the final sentinel so the last process does not remain blocked
-    # _ = pipes[NUM_PROCS][0].recv()
     
     # Join all processes
     for p in pipes:
