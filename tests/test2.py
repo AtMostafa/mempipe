@@ -1,6 +1,7 @@
 import numpy as np
-import mempipe
+from mempipe import MemPipe
 from multiprocessing import Process, Pipe
+import time
 
 def worker(in_conn, out_conn, index):
     """
@@ -25,8 +26,8 @@ if __name__ == "__main__":
     # Example data
     arr = np.array([1, 2, 3], dtype=np.int64)
     NUM_PROCS = 5
-    pipes = [mempipe.MemPipe(arr).Pipe() for _ in range(NUM_PROCS + 1)]
-    # pipes = [Pipe(duplex=False) for _ in range(NUM_PROCS + 1)]
+    pipes = [MemPipe().Pipe() for _ in range(NUM_PROCS + 1)]
+    # pipes = [Pie(duplex=False) for _ in range(NUM_PROCS + 1)]
     
     # Spawn the 5 worker processes in a chain
     processes = []
@@ -39,6 +40,11 @@ if __name__ == "__main__":
 
     # Send the array to the first process via pipes[0][1]
     pipes[0][1].send(arr)
+    # time.sleep(1)
+    # pipes[0][1].send(arr*10)
+    # time.sleep(1)
+    # pipes[0][1].send(arr*100)
+    
     
     # Receive the processed array from the last process via pipes[5][0]
     while True:
