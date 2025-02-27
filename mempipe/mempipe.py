@@ -56,7 +56,6 @@ class MemPipe:
         with self._lock:
             data = self._arr
         self._polled = False
-        print(f"Received: {data}")
         return data
 
     def poll(self, *args, **kwargs):
