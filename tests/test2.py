@@ -25,8 +25,8 @@ if __name__ == "__main__":
     # Example data
     arr = np.array([1, 2, 3], dtype=np.int64)
     NUM_PROCS = 5
-    # pipes = [mempipe.MemPipe(arr).Pipe(duplex=False) for _ in range(NUM_PROCS + 1)]
-    pipes = [Pipe(duplex=False) for _ in range(NUM_PROCS + 1)]
+    pipes = [mempipe.MemPipe(arr).Pipe() for _ in range(NUM_PROCS + 1)]
+    # pipes = [Pipe(duplex=False) for _ in range(NUM_PROCS + 1)]
     
     # Spawn the 5 worker processes in a chain
     processes = []
@@ -36,7 +36,7 @@ if __name__ == "__main__":
         p = Process(target=worker, args=(pipes[i][0], pipes[i+1][1], i))
         p.start()
         processes.append(p)
-    
+
     # Send the array to the first process via pipes[0][1]
     pipes[0][1].send(arr)
     

@@ -14,13 +14,27 @@ class MemPipe:
         ex_array is used to determine the shape and dtype of the shared memory
         """
         self._shape = ex_array.shape
-        dtype = ex_array.dtype
+        self._shm_dtype = ex_array.dtype
         shm_size = ex_array.nbytes
         self._shm = SharedMemory(create=True, size=shm_size)
-        self._arr = np.ndarray(self._shape, dtype=dtype, buffer=self._shm.buf)
+        self._shm_name = self._shm.name
+
+        self._arr = ex_array
         self._lock = Lock()
         self._p_in, self._p_out = Pipe(duplex=False)
         self._polled = False
+
+    @property
+    def _arr(self):
+        shm = SharedMemory(name=self._shm_name)
+        arr = np.ndarray(self._shape, dtype=self._shm_dtype, buffer=shm.buf)
+        return arr.copy()
+
+    @_arr.setter
+    def _arr(self, value):
+        shm = SharedMemory(name=self._shm_name)
+        arr = np.ndarray(self._shape, dtype=self._shm_dtype, buffer=shm.buf)
+        arr[:] = value
 
     def Pipe(self, *args, **kwargs):
         "To imitate the multiprocessing.Pipe() interface"
@@ -33,15 +47,16 @@ class MemPipe:
         assert data.shape == self._shape, \
             f"Data shape {data.shape} does not match mempipe shape {self._shape}"
         with self._lock:
-            self._arr[:] = data
+            self._arr = data
         self._p_out.send("GO")
 
     def recv(self):
         if not self._polled:
             return None
         with self._lock:
-            data = self._arr.copy()
+            data = self._arr
         self._polled = False
+        print(f"Received: {data}")
         return data
 
     def poll(self, *args, **kwargs):
