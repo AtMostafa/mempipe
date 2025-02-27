@@ -67,15 +67,14 @@ def run_pipeline(use_mempipe=False):
 if __name__ == "__main__":
     from matplotlib import pyplot as plt
     mempipe_time = []
+    pipe_time = []
     for _ in range(20):
         a = run_pipeline(use_mempipe=True)
         mempipe_time.append(a)
-    plt.plot(mempipe_time, label='MemPipe')
-    
-    pipe_time = []
-    for _ in range(20):
         a = run_pipeline(use_mempipe=False)
         pipe_time.append(a)
+
+    plt.plot(mempipe_time, label='MemPipe')
     plt.plot(pipe_time, label='Pipe')
     plt.legend()
     plt.show()    
