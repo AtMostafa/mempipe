@@ -7,7 +7,7 @@ import numpy as np
 
 
 class MemPipe:
-    def __init__(self, ex_array: np.ndarray = None):
+    def __init__(self, ex_array: np.ndarray):
         """
         Initialize the mempipe.
         MemPipes can only transfer numpy arrays of the same shape and dtype. 
