@@ -53,10 +53,10 @@ class MemPipe:
 
     def Pipe(self, *args, **kwargs):
         "To imitate the multiprocessing.Pipe() interface"
-        if hasattr(self, "_p_in"):
+        if hasattr(self, "final_shape"):
             return self, self
         else:
-            raise ValueError("MemPipe not instanciaed")
+            raise ValueError("MemPipe not instanciated")
 
     def send(self, data):
         self._arr = data

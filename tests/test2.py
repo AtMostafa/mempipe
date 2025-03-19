@@ -23,7 +23,7 @@ if __name__ == "__main__":
     # pipe[5] is the channel from P4 back to main.
     
     # Example data
-    arr = np.random.rand(100,10)
+    arr = np.random.rand(2,2)
     NUM_PROCS = 5
     pipes = [mempipe.MemPipe(arr).Pipe() for _ in range(NUM_PROCS + 1)]
     # pipes = [Pipe(duplex=False) for _ in range(NUM_PROCS + 1)]
@@ -33,12 +33,12 @@ if __name__ == "__main__":
     for i in range(NUM_PROCS):
         # in_conn for worker i is pipes[i][0],
         # out_conn for worker i is pipes[i+1][1]
-        p = Process(target=worker, args=(pipes[i][0], pipes[i+1][1], i))
+        p = Process(target=worker, args=(pipes[i][0], pipes[i+1][1], 1))
         p.start()
         processes.append(p)
 
     # Send the array to the first process via pipes[0][1]
-    arr = np.random.rand(150,10)
+    arr = np.random.rand(2,2)
     pipes[0][1].send(arr)
     
     # Receive the processed array from the last process via pipes[5][0]
