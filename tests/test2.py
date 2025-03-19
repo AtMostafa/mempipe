@@ -11,7 +11,7 @@ def worker(in_conn, out_conn, index):
         if not in_conn.poll():
             continue
         arr = in_conn.recv()
-        arr = arr + index
+        arr = arr + 1
         print(f'Worker {index} sent:', arr)
         out_conn.send(arr)
 
@@ -23,7 +23,7 @@ if __name__ == "__main__":
     # pipe[5] is the channel from P4 back to main.
     
     # Example data
-    arr = np.random.rand(2,2)
+    arr = np.random.rand(1200,200)
     NUM_PROCS = 5
     pipes = [mempipe.MemPipe(arr).Pipe() for _ in range(NUM_PROCS + 1)]
     # pipes = [Pipe(duplex=False) for _ in range(NUM_PROCS + 1)]
@@ -33,22 +33,25 @@ if __name__ == "__main__":
     for i in range(NUM_PROCS):
         # in_conn for worker i is pipes[i][0],
         # out_conn for worker i is pipes[i+1][1]
-        p = Process(target=worker, args=(pipes[i][0], pipes[i+1][1], 1))
+        p = Process(target=worker, args=(pipes[i][0], pipes[i+1][1], i))
         p.start()
         processes.append(p)
 
     # Send the array to the first process via pipes[0][1]
-    arr = np.random.rand(2,2)
-    pipes[0][1].send(arr)
+    arr1 = np.random.rand(1200,200)
+    pipes[0][1].send(arr1)
     
     # Receive the processed array from the last process via pipes[5][0]
     while True:
-        if pipes[NUM_PROCS][0].poll(5):
+        if pipes[NUM_PROCS][0].poll():
             result = pipes[NUM_PROCS][0].recv()
             break
     
     print("Received from the final process:", result)
-    # result: [11, 12, 13]
+    if np.allclose(result, arr1 + NUM_PROCS):
+        print("Results match!")
+    else:
+        print("Results do not match!")
     
     # Join all processes
     for p in pipes:
