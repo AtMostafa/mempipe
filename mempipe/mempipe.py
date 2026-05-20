@@ -7,14 +7,13 @@ import numpy as np
 
 
 class MemPipe:
-    def __init__(self, ex_array: np.ndarray):
+    def __init__(self, ex_array: np.ndarray | None = None):
         """
         Initialize the mempipe.
         MemPipes can only transfer numpy arrays of the same shape and dtype.
         ex_array: example numpy array that will be shared between processes
         ex_array is used to determine the shape and dtype of the shared memory
-        If arrays might change size, use ex_array with the largest size
-        Data larger than ex_array will be truncated
+        If not supplied initially, it will be inferred from the first send.
         """
         self._lock = Lock()
         self._p_in, self._p_out = Pipe(duplex=False)
@@ -120,6 +119,12 @@ class MemPipe:
                     conn.close()
                 except Exception:
                     pass
+
+    def __setstate__(self, state):
+        # When a MemPipe is pickled (e.g. during Process.start), the receiving
+        # side must not inherit ownership of the shared memory.
+        self.__dict__.update(state)
+        self._owns_shm = False
 
     def __del__(self):
         try:
