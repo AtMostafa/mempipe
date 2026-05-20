@@ -16,7 +16,7 @@ Run with:
 
 import numpy as np
 from mempipe import MemPipe
-from multiprocessing import Pipe, get_context
+from multiprocessing import Pipe, Process
 from time import perf_counter
 
 
@@ -31,7 +31,6 @@ def worker(in_conn, out_conn, index):
 
 
 def run_pipeline(use_mempipe, arr, num_procs):
-    ctx = get_context("spawn")
     if use_mempipe:
         pipes = [MemPipe().Pipe() for _ in range(num_procs + 1)]
     else:
@@ -40,7 +39,7 @@ def run_pipeline(use_mempipe, arr, num_procs):
     t0 = perf_counter()
     processes = []
     for i in range(num_procs):
-        p = ctx.Process(target=worker, args=(pipes[i][0], pipes[i + 1][1], i))
+        p = Process(target=worker, args=(pipes[i][0], pipes[i + 1][1], i))
         p.start()
         processes.append(p)
 

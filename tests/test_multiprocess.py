@@ -5,6 +5,12 @@ arrays, and explicit timeouts so they fit a CI suite.
 
 Workers are defined at module top level so they're picklable under the
 'spawn' start method (required on Windows).
+
+NOTE: We use the default `multiprocessing.Process` (not an explicit
+get_context("spawn")) so that the lock/pipe primitives inside MemPipe —
+which are also created from the default context — match the Process's
+start method. Mixing a default-context Lock with an explicit spawn-context
+Process hangs on Linux (the cross-context semaphore is unusable).
 """
 
 import multiprocessing
@@ -44,18 +50,52 @@ def _deferred_init_worker(in_conn, out_conn):
             return
 
 
+def _ownership_probe(mp, result_q):
+    """Spawned worker: report whether the unpickled MemPipe inherited shm ownership."""
+    result_q.put(mp._owns_shm)
+
+
+def test_pickle_roundtrip_drops_shm_ownership():
+    """When a MemPipe is pickled during Process.start, the child must NOT
+    inherit _owns_shm. Otherwise on Linux the child's __del__ would unlink
+    the parent's shared memory out from under it. (Windows masks the bug
+    because SharedMemory.unlink() is a no-op there.)
+
+    Uses an explicit spawn context here: this test only exercises pickle
+    state — no Lock/Pipe ops happen on the child — so the cross-context
+    Lock hang does not apply.
+    """
+    ctx = multiprocessing.get_context("spawn")
+    mp = mempipe.MemPipe(np.zeros((4, 4), dtype=np.float64))
+    try:
+        assert mp._owns_shm is True
+        result_q = ctx.Queue()
+        proc = ctx.Process(target=_ownership_probe, args=(mp, result_q))
+        proc.start()
+        try:
+            child_owns_shm = result_q.get(timeout=10)
+        finally:
+            proc.join(timeout=5)
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(timeout=2)
+        assert child_owns_shm is False
+        # Parent must still own the shm after the child has come and gone.
+        assert mp._owns_shm is True
+    finally:
+        mp.close()
+
+
 def test_deferred_init_two_process_echo():
     """Two-process round trip using MemPipe() with NO ex_array.
 
     This exercises the on-the-fly shm-creation path: the parent's first send()
     creates the shm and the child attaches by name on its first poll().
     """
-    ctx = multiprocessing.get_context("spawn")
-
     pipe_to_worker = mempipe.MemPipe().Pipe()
     pipe_from_worker = mempipe.MemPipe().Pipe()
 
-    proc = ctx.Process(
+    proc = multiprocessing.Process(
         target=_deferred_init_worker,
         args=(pipe_to_worker[0], pipe_from_worker[1]),
     )
@@ -84,13 +124,12 @@ def test_deferred_init_two_process_echo():
 
 def test_two_process_echo():
     """Parent → worker → parent round trip via two MemPipes."""
-    ctx = multiprocessing.get_context("spawn")
     ex = np.zeros((50, 50), dtype=np.float64)
 
     pipe_to_worker = mempipe.MemPipe(ex).Pipe()
     pipe_from_worker = mempipe.MemPipe(ex).Pipe()
 
-    proc = ctx.Process(
+    proc = multiprocessing.Process(
         target=_multiply_worker,
         args=(pipe_to_worker[0], pipe_from_worker[1], 2.0),
     )
@@ -118,7 +157,6 @@ def test_two_process_echo():
 
 def test_five_process_pipeline():
     """Linear chain of 5 workers, each adding 1; result should equal input + 5."""
-    ctx = multiprocessing.get_context("spawn")
     ex = np.zeros((50, 50), dtype=np.float64)
     NUM_PROCS = 5
 
@@ -126,7 +164,7 @@ def test_five_process_pipeline():
 
     processes = []
     for i in range(NUM_PROCS):
-        p = ctx.Process(
+        p = multiprocessing.Process(
             target=_add_one_worker,
             args=(pipes[i][0], pipes[i + 1][1]),
         )
