@@ -7,6 +7,13 @@ The passed data can only be a numpy array.
 
 Originally designed for a real-time Brain-Computer-Interface application.
 
+## Install
+
+Using [uv](https://docs.astral.sh/uv/):
+
+    uv sync         # set up the environment
+    uv run pytest   # run the tests
+
 ## How to use
 
 Import the `MemPipe` class.
