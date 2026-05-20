@@ -10,7 +10,7 @@ class MemPipe:
     def __init__(self, ex_array: np.ndarray = None):
         """
         Initialize the mempipe.
-        MemPipes can only transfer numpy arrays of the same shape and dtype. 
+        MemPipes can only transfer numpy arrays of the same shape and dtype.
         ex_array: example numpy array that will be shared between processes
         ex_array is used to determine the shape and dtype of the shared memory
         If not supplied initially, it will be inferred from the first send.
@@ -19,6 +19,7 @@ class MemPipe:
         self._p_in, self._p_out = Pipe(duplex=False)
         self._polled = False
         self.shm_created = False
+        self._owns_shm = False
         if isinstance(ex_array, np.ndarray):
             self._init_shm(ex_array)
 
@@ -39,32 +40,30 @@ class MemPipe:
 
     def _init_shm(self, ex_array=None, shape=None, dtype=None, nbytes=None, name=None):
         if isinstance(ex_array, np.ndarray):
+            # Sender path: create a new shm region and seed it with ex_array.
             self._shape = ex_array.shape
             self._shm_dtype = ex_array.dtype
             self._shm_size = ex_array.nbytes
-        elif shape and dtype and nbytes and name:
-            self._shape = shape
+            self._shm = SharedMemory(create=True, size=self._shm_size)
+            self._shm_name = self._shm.name
+            self._owns_shm = True
+            self._arr = ex_array
+        elif shape is not None and dtype is not None and nbytes is not None and name is not None:
+            # Receiver path: attach to an existing shm by name. Must NOT write
+            # to the buffer — the sender has already placed valid data there.
+            self._shape = tuple(shape)
             self._shm_dtype = dtype
             self._shm_size = nbytes
             self._shm_name = name
-            ex_array = np.zeros(shape, dtype=dtype)
-        else:
-            raise ValueError("ex_array or (shape, dtype, nbytes) must be provided")
-        try:
             self._shm = SharedMemory(name=self._shm_name)
-        except (FileNotFoundError, TypeError, AttributeError):
-            self._shm = SharedMemory(create=True, size=self._shm_size)
-            self._shm_name = self._shm.name
-            
-        self._arr = ex_array
+            self._owns_shm = False
+        else:
+            raise ValueError("ex_array or (shape, dtype, nbytes, name) must be provided")
         self.shm_created = True
 
     def Pipe(self, *args, **kwargs):
         "To imitate the multiprocessing.Pipe() interface"
-        if hasattr(self, "_p_in"):
-            return self, self
-        else:
-            raise ValueError("MemPipe not instanciaed")
+        return self, self
 
     def send(self, data):
         if self.shm_created:
@@ -77,7 +76,6 @@ class MemPipe:
             f"Data shape {data.shape} does not match mempipe shape {self._shape}"
         self._arr = data
         self._p_out.send(msg)
-        print('sent' + str(msg))
 
     def recv(self):
         if not self._polled:
@@ -89,24 +87,41 @@ class MemPipe:
     def poll(self, *args, **kwargs):
         if not self._p_in.poll(*args, **kwargs):
             return False
-        else:
-            p_data = self._p_in.recv()
-            if p_data == "GO":
-                self._polled = True
-                return True
-            elif isinstance(p_data, tuple):
-                if not self.shm_created:
-                    print('rec'+ str(p_data))
-                    self._init_shm(shape=p_data[0], dtype=p_data[1], nbytes=p_data[2], name=p_data[3])
-                self._polled = True
-                return True
+        p_data = self._p_in.recv()
+        if p_data == "GO":
+            self._polled = True
+            return True
+        if isinstance(p_data, tuple):
+            if not self.shm_created:
+                self._init_shm(shape=p_data[0], dtype=p_data[1], nbytes=p_data[2], name=p_data[3])
+            self._polled = True
+            return True
         raise ValueError("Invalid message received")
 
     def close(self):
-        self._shm.close()
-        self._shm.unlink()
-        self._p_in.close()
-        self._p_out.close()
-    
+        shm = getattr(self, "_shm", None)
+        if shm is not None:
+            try:
+                shm.close()
+            except Exception:
+                pass
+            if getattr(self, "_owns_shm", False):
+                try:
+                    shm.unlink()
+                except Exception:
+                    pass
+                self._owns_shm = False
+            self._shm = None
+        for attr in ("_p_in", "_p_out"):
+            conn = getattr(self, attr, None)
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
     def __del__(self):
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            pass
