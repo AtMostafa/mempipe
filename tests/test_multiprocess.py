@@ -17,6 +17,7 @@ import multiprocessing
 import time
 
 import numpy as np
+import pytest
 
 import mempipe
 
@@ -55,11 +56,50 @@ def _ownership_probe(mp, result_q):
     result_q.put(mp._owns_shm)
 
 
+def test_setstate_drops_shm_ownership():
+    """Unit-level contract check (runs on every platform, no child process).
+
+    pickle calls __setstate__ on the receiving side; it must reset _owns_shm
+    to False so a child never unlinks the parent's shared memory. We reproduce
+    the dict pickle would hand over (minus the Lock, which only pickles inside
+    a real spawn) and feed it to a fresh __new__'d instance, exactly as pickle
+    would.
+    """
+    mp = mempipe.MemPipe(np.zeros((4, 4), dtype=np.float64))
+    try:
+        assert mp._owns_shm is True
+
+        state = dict(mp.__dict__)
+        # These are not picklable outside an actual spawn; pickle would handle
+        # them via the OS, but for a direct __setstate__ check we drop them so
+        # the unpickled instance's close()/__del__ stays inert.
+        for key in ("_lock", "_p_in", "_p_out", "_shm"):
+            state.pop(key, None)
+
+        child = mempipe.MemPipe.__new__(mempipe.MemPipe)
+        child.__setstate__(state)
+
+        assert child._owns_shm is False
+        # Parent retains ownership; the child cannot unlink its shm.
+        assert mp._owns_shm is True
+    finally:
+        mp.close()
+
+
+@pytest.mark.skipif(
+    multiprocessing.get_start_method() != "spawn",
+    reason="MemPipe builds its Lock/Pipe from the default context. Sharing them "
+           "with a spawn-context Process only works when the default start "
+           "method is itself spawn (Windows/macOS). On a fork default (Linux) "
+           "pickling the fork-context Lock to a spawn child raises RuntimeError.",
+)
 def test_pickle_roundtrip_drops_shm_ownership():
-    """When a MemPipe is pickled during Process.start, the child must NOT
-    inherit _owns_shm. Otherwise on Linux the child's __del__ would unlink
-    the parent's shared memory out from under it. (Windows masks the bug
-    because SharedMemory.unlink() is a no-op there.)
+    """Integration counterpart to test_setstate_drops_shm_ownership: prove a
+    REAL spawned child actually triggers __setstate__ and drops _owns_shm.
+
+    Otherwise on Linux the child's __del__ would unlink the parent's shared
+    memory out from under it. (Windows masks the bug because
+    SharedMemory.unlink() is a no-op there.)
 
     Uses an explicit spawn context here: this test only exercises pickle
     state — no Lock/Pipe ops happen on the child — so the cross-context
