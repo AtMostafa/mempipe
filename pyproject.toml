@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mempipe"
-version = "0.3.0"
+version = "0.3.1"
 description = "Pipe-like API over multiprocessing.shared_memory for fast numpy array transfer between processes."
 authors = [{ name = "Mostafa Safaie", email = "mostafa.safaie@gmail.com" }]
 readme = "README.md"
