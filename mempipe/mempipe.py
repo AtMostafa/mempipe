@@ -6,6 +6,11 @@ from multiprocessing.shared_memory import SharedMemory
 import numpy as np
 
 
+# Sentinel tag prefixed to non-ndarray values so poll() can distinguish a
+# passthrough payload from a shm-init tuple (which is always a 4-tuple).
+_PASSTHROUGH = "__pt__"
+
+
 class MemPipe:
     def __init__(self, ex_array: np.ndarray | None = None):
         """
@@ -18,6 +23,8 @@ class MemPipe:
         self._lock = Lock()
         self._p_in, self._p_out = Pipe(duplex=False)
         self._polled = False
+        self._is_passthrough = False
+        self._passthrough_val = None
         self.shm_created = False
         self._owns_shm = False
         if isinstance(ex_array, np.ndarray):
@@ -66,6 +73,11 @@ class MemPipe:
         return self, self
 
     def send(self, data):
+        if not isinstance(data, np.ndarray):
+            # Non-ndarray values (strings, lists, etc.) pass through the underlying pipe directly.
+            self._p_out.send((_PASSTHROUGH, data))
+            return
+
         if self.shm_created:
             msg = "GO"
         else:
@@ -80,20 +92,30 @@ class MemPipe:
     def recv(self):
         if not self._polled:
             return None
-        data = self._arr
         self._polled = False
-        return data
+        if self._is_passthrough:
+            self._is_passthrough = False
+            return self._passthrough_val
+        return self._arr
 
     def poll(self, *args, **kwargs):
         if not self._p_in.poll(*args, **kwargs):
             return False
         p_data = self._p_in.recv()
         if p_data == "GO":
+            self._is_passthrough = False
             self._polled = True
             return True
         if isinstance(p_data, tuple):
+            if len(p_data) == 2 and p_data[0] == _PASSTHROUGH:
+                self._passthrough_val = p_data[1]
+                self._is_passthrough = True
+                self._polled = True
+                return True
+            # Shape/dtype init tuple: (shape, dtype, nbytes, name)
             if not self.shm_created:
                 self._init_shm(shape=p_data[0], dtype=p_data[1], nbytes=p_data[2], name=p_data[3])
+            self._is_passthrough = False
             self._polled = True
             return True
         raise ValueError("Invalid message received")
@@ -125,6 +147,10 @@ class MemPipe:
         # side must not inherit ownership of the shared memory.
         self.__dict__.update(state)
         self._owns_shm = False
+        if '_is_passthrough' not in self.__dict__:
+            self._is_passthrough = False
+        if '_passthrough_val' not in self.__dict__:
+            self._passthrough_val = None
 
     def __del__(self):
         try:
