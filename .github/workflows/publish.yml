@@ -1,0 +1,63 @@
+name: Publish to PyPI
+
+# Publishes mempipe to PyPI when a GitHub Release is published.
+# Uses PyPI Trusted Publishing (OIDC) — no API token stored in GitHub secrets.
+# You can also trigger a manual run from the Actions tab (workflow_dispatch).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Run test suite
+        run: uv run --frozen pytest -q
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Validate package metadata
+        run: uvx twine check dist/*
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # The environment name must match the one you configure on PyPI's
+    # trusted-publisher settings for this project.
+    environment:
+      name: pypi
+      url: https://pypi.org/project/mempipe/
+    permissions:
+      id-token: write   # required for OIDC trusted publishing
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
